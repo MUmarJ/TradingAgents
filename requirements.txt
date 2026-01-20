@@ -26,3 +26,11 @@ langchain_anthropic
 langchain-google-genai
 playwright
 markdown2
+
+# Broker integrations (PR #281)
+alpaca-trade-api
+urllib3
+
+# ACE Framework - Self-improving agents (PR #302)
+ace-framework
+python-dotenv
