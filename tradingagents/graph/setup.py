@@ -1,7 +1,7 @@
 # TradingAgents/graph/setup.py
 
 from typing import Dict, Any
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode
 
@@ -16,8 +16,8 @@ class GraphSetup:
 
     def __init__(
         self,
-        quick_thinking_llm: ChatOpenAI,
-        deep_thinking_llm: ChatOpenAI,
+        quick_thinking_llm: BaseChatModel,
+        deep_thinking_llm: BaseChatModel,
         tool_nodes: Dict[str, ToolNode],
         bull_memory,
         bear_memory,
@@ -25,8 +25,22 @@ class GraphSetup:
         invest_judge_memory,
         risk_manager_memory,
         conditional_logic: ConditionalLogic,
+        ace_context_fn=None,
     ):
-        """Initialize with required components."""
+        """Initialize with required components.
+
+        Args:
+            quick_thinking_llm: LLM for fast operations
+            deep_thinking_llm: LLM for complex reasoning
+            tool_nodes: Dictionary of tool nodes by analyst type
+            bull_memory: Memory for bull researcher
+            bear_memory: Memory for bear researcher
+            trader_memory: Memory for trader
+            invest_judge_memory: Memory for investment judge
+            risk_manager_memory: Memory for risk manager
+            conditional_logic: Conditional logic handler
+            ace_context_fn: Optional callable returning ACE learned strategies
+        """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
@@ -36,6 +50,21 @@ class GraphSetup:
         self.invest_judge_memory = invest_judge_memory
         self.risk_manager_memory = risk_manager_memory
         self.conditional_logic = conditional_logic
+        self.ace_context_fn = ace_context_fn
+
+    def set_memories(self, bull_memory, bear_memory, trader_memory,
+                     invest_judge_memory, risk_manager_memory):
+        """Update memory references used by agent closures.
+
+        This must be called before propagate() when using scoped memories
+        to ensure agent nodes use the correct ticker-scoped memory.
+        The graph must be rebuilt after calling this method.
+        """
+        self.bull_memory = bull_memory
+        self.bear_memory = bear_memory
+        self.trader_memory = trader_memory
+        self.invest_judge_memory = invest_judge_memory
+        self.risk_manager_memory = risk_manager_memory
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -51,6 +80,9 @@ class GraphSetup:
         """
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
+
+        # Store selected_analysts for rebuild support
+        self._selected_analysts = selected_analysts
 
         # Create analyst nodes
         analyst_nodes = {}
@@ -86,6 +118,8 @@ class GraphSetup:
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
 
         # Create researcher and manager nodes
+        # These closures capture self's memory attributes, which can be
+        # updated via set_memories() + rebuild_graph() per ticker
         bull_researcher_node = create_bull_researcher(
             self.quick_thinking_llm, self.bull_memory
         )
@@ -95,7 +129,9 @@ class GraphSetup:
         research_manager_node = create_research_manager(
             self.deep_thinking_llm, self.invest_judge_memory
         )
-        trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
+        trader_node = create_trader(
+            self.quick_thinking_llm, self.trader_memory, self.ace_context_fn
+        )
 
         # Create risk analysis nodes
         risky_analyst = create_risky_debator(self.quick_thinking_llm)
