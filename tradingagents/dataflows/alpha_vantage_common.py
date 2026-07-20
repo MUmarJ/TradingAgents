@@ -84,6 +84,41 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
 
 
 
+# Cache for company name lookups to avoid repeated API calls
+_company_name_cache = {}
+
+
+def get_company_name(ticker: str) -> str | None:
+    """Look up company name for a ticker symbol.
+
+    Uses Alpha Vantage OVERVIEW endpoint and caches results.
+    Returns None if lookup fails.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., "AAPL", "RAPT")
+
+    Returns:
+        Company name string or None if lookup fails
+    """
+    if ticker in _company_name_cache:
+        return _company_name_cache[ticker]
+
+    try:
+        result = _make_api_request("OVERVIEW", {"symbol": ticker})
+        # OVERVIEW returns JSON, parse it
+        if isinstance(result, str):
+            result = json.loads(result)
+        if isinstance(result, dict) and "Name" in result:
+            name = result["Name"]
+            _company_name_cache[ticker] = name
+            return name
+    except Exception as e:
+        print(f"  Warning: Could not look up company name for {ticker}: {e}")
+
+    _company_name_cache[ticker] = None
+    return None
+
+
 def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> str:
     """
     Filter CSV data to include only rows within the specified date range.
