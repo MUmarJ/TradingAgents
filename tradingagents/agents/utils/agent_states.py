@@ -50,6 +50,8 @@ class RiskDebateState(TypedDict):
 class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
+    news_lookback_days: Annotated[int, "Number of days to look back for news analysis"]
+    news_article_limit: Annotated[int, "Maximum number of news articles to fetch"]
 
     sender: Annotated[str, "Agent that sent this message"]
 

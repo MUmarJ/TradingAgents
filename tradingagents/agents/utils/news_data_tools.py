@@ -7,6 +7,7 @@ def get_news(
     ticker: Annotated[str, "Ticker symbol"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    limit: Annotated[int, "Maximum number of articles to return"] = 50,
 ) -> str:
     """
     Retrieve news data for a given ticker symbol.
@@ -15,10 +16,11 @@ def get_news(
         ticker (str): Ticker symbol
         start_date (str): Start date in yyyy-mm-dd format
         end_date (str): End date in yyyy-mm-dd format
+        limit (int): Maximum number of articles to return (default 50)
     Returns:
         str: A formatted string containing news data
     """
-    return route_to_vendor("get_news", ticker, start_date, end_date)
+    return route_to_vendor("get_news", ticker, start_date, end_date, limit)
 
 @tool
 def get_global_news(

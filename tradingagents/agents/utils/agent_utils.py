@@ -15,9 +15,24 @@ def normalize_content(content):
     return content
 
 
+def get_period_description(days: int) -> str:
+    """Convert lookback days to human-readable period description."""
+    if days <= 7:
+        return "the past week"
+    elif days <= 30:
+        return f"the past {days} days (approximately 1 month)"
+    elif days <= 90:
+        return f"the past {days} days (approximately 3 months)"
+    elif days <= 180:
+        return f"the past {days} days (approximately 6 months)"
+    else:
+        return f"the past {days} days (approximately 1 year)"
+
+
 # Import tools from separate utility files
 from tradingagents.agents.utils.core_stock_tools import (
-    get_stock_data
+    get_stock_data,
+    get_current_quote
 )
 from tradingagents.agents.utils.technical_indicators_tools import (
     get_indicators
@@ -33,6 +48,9 @@ from tradingagents.agents.utils.news_data_tools import (
     get_insider_sentiment,
     get_insider_transactions,
     get_global_news
+)
+from tradingagents.agents.utils.social_sentiment_tools import (
+    get_social_sentiment
 )
 
 def create_msg_delete():
