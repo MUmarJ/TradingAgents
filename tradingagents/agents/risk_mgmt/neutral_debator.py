@@ -18,11 +18,11 @@ def create_neutral_debator(llm):
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
+        prompt = f"""As the Neutral Risk Analyst, your role is to evaluate the trader's decision based strictly on the weight of quantitative evidence. You do NOT default to caution or action — you follow the data. If the data tilts bullish, you support the bullish case. If bearish, you support the bearish case. You challenge BOTH the risky and safe analysts when their arguments lack data support.Here is the trader's decision:
 
 {trader_decision}
 
-Your task is to challenge both the Risky and Safe Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
+Your task is to challenge both the Risky and Safe Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support the direction best supported by the data, regardless of whether that direction is aggressive, conservative, or neutral:
 
 Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
