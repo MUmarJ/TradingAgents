@@ -216,11 +216,12 @@ def _get_stock_stats_bulk(
             raise Exception("Stockstats fail: Yahoo Finance data not fetched yet!")
     else:
         # Online data fetching with caching
-        today_date = pd.Timestamp.today()
+        # Use curr_date as the end boundary to prevent look-ahead bias —
+        # indicator calculations must not include future data.
         curr_date_dt = pd.to_datetime(curr_date)
-        
-        end_date = today_date
-        start_date = today_date - pd.DateOffset(years=15)
+
+        end_date = curr_date_dt + pd.DateOffset(days=1)  # +1 for inclusive
+        start_date = end_date - pd.DateOffset(years=15)
         start_date_str = start_date.strftime("%Y-%m-%d")
         end_date_str = end_date.strftime("%Y-%m-%d")
         
