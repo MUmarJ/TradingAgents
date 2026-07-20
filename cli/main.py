@@ -26,16 +26,66 @@ from rich.rule import Rule
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.backtest.outcome_tracker import OutcomeTracker, TradeOutcome
 from cli.models import AnalystType
 from cli.utils import *
 
 console = Console()
 
+# Recall period configuration: maps CLI option to lookback days
+RECALL_PERIODS = {
+    "3mo": 90,    # 3 months
+    "6mo": 180,   # 6 months
+    "12mo": 365,  # 12 months / 1 year
+}
+
 app = typer.Typer(
     name="TradingAgents",
     help="TradingAgents CLI: Multi-Agents LLM Financial Trading Framework",
     add_completion=True,  # Enable shell completion
+    invoke_without_command=True,  # Allow running without subcommand
 )
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    default_models: bool = typer.Option(
+        False,
+        "--default-models",
+        "-d",
+        help="Use optimized default models (gpt-5-mini-2025-08-07 quick, gpt-5.2-2025-09-04 deep) - skips model selection"
+    ),
+    use_cache: bool = typer.Option(
+        False,
+        "--cache",
+        "-c",
+        help="Resume analysis using cached reports - skips analysts that already have reports for the date"
+    ),
+    recall: Optional[str] = typer.Option(
+        None,
+        "--recall",
+        "-r",
+        help="News recall period: 3mo, 6mo, 12mo, or 'all' for all periods. Creates separate report folders per period."
+    ),
+):
+    """TradingAgents CLI - Multi-Agents LLM Financial Trading Framework."""
+    if ctx.invoked_subcommand is None:
+        # Validate recall option if provided
+        if recall is not None:
+            recall_lower = recall.lower()
+            if recall_lower != "all" and recall_lower not in RECALL_PERIODS:
+                console.print(f"[red]Invalid recall period: {recall}. Use 3mo, 6mo, 12mo, or all[/red]")
+                raise typer.Exit(1)
+
+        # No subcommand provided, run analyze as default
+        run_analysis(use_default_models=default_models, use_cache=use_cache, recall=recall)
+        # Update outcomes database
+        config = DEFAULT_CONFIG.copy()
+        results_dir = config.get("results_dir", "./results")
+        processed = update_outcomes_from_results(results_dir)
+        if processed > 0:
+            console.print(f"[dim]Updated outcomes database with {processed} new entries[/dim]")
 
 
 # Create a deque to store recent messages with a maximum length
@@ -395,8 +445,13 @@ def update_display(layout, spinner_text=None):
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
 
 
-def get_user_selections():
-    """Get all user selections before starting the analysis display."""
+def get_user_selections(use_default_models: bool = False):
+    """Get all user selections before starting the analysis display.
+
+    Args:
+        use_default_models: If True, skip model selection and use default config
+                           (gpt-5-mini-2025-08-07 for quick thinking, gpt-5.2-2025-09-04 for deep thinking)
+    """
     # Display ASCII art welcome message
     with open("./cli/static/welcome.txt", "r") as f:
         welcome_ascii = f.read()
@@ -476,22 +531,30 @@ def get_user_selections():
         )
     )
     selected_llm_provider, backend_url = select_llm_provider()
-    
-    # Step 6: Quick-Thinking LLM Engine
-    console.print(
-        create_question_box(
-            "Step 6: Quick-Thinking LLM Engine", "Select your quick-thinking model for fast operations"
-        )
-    )
-    selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
 
-    # Step 7: Deep-Thinking LLM Engine
-    console.print(
-        create_question_box(
-            "Step 7: Deep-Thinking LLM Engine", "Select your deep-thinking model for complex reasoning"
+    if use_default_models:
+        # Use optimized defaults: gpt-5-mini-2025-08-07 (500K TPM) for quick, gpt-5.2-2025-09-04 (500K TPM) for deep
+        selected_shallow_thinker = DEFAULT_CONFIG["quick_think_llm"]
+        selected_deep_thinker = DEFAULT_CONFIG["deep_think_llm"]
+        console.print(
+            f"[green]Using default models:[/green] Quick={selected_shallow_thinker}, Deep={selected_deep_thinker}"
         )
-    )
-    selected_deep_thinker = select_deep_thinking_agent(selected_llm_provider)
+    else:
+        # Step 6: Quick-Thinking LLM Engine
+        console.print(
+            create_question_box(
+                "Step 6: Quick-Thinking LLM Engine", "Select your quick-thinking model for fast operations"
+            )
+        )
+        selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
+
+        # Step 7: Deep-Thinking LLM Engine
+        console.print(
+            create_question_box(
+                "Step 7: Deep-Thinking LLM Engine", "Select your deep-thinking model for complex reasoning"
+            )
+        )
+        selected_deep_thinker = select_deep_thinking_agent(selected_llm_provider)
 
     return {
         "ticker": selected_ticker,
@@ -747,10 +810,52 @@ def extract_content_string(content):
     else:
         return str(content)
 
-def run_analysis():
-    """Run analysis for one or more ticker symbols."""
+def load_cached_reports(results_dir: Path, ticker: str, analysis_date: str) -> dict:
+    """Load previously generated reports from cache.
+
+    Args:
+        results_dir: Base results directory
+        ticker: Stock ticker symbol
+        analysis_date: Date of analysis in YYYY-MM-DD format
+
+    Returns:
+        Dictionary mapping report names to their content, e.g.:
+        {"market_report": "...", "sentiment_report": "...", ...}
+    """
+    report_dir = results_dir / ticker / analysis_date / "reports"
+    cached = {}
+
+    report_files = {
+        "market_report": "market_report.md",
+        "sentiment_report": "sentiment_report.md",
+        "news_report": "news_report.md",
+        "fundamentals_report": "fundamentals_report.md",
+    }
+
+    for report_key, filename in report_files.items():
+        report_path = report_dir / filename
+        if report_path.exists():
+            try:
+                content = report_path.read_text()
+                if content.strip():  # Only cache non-empty reports
+                    cached[report_key] = content
+            except Exception:
+                pass
+
+    return cached
+
+
+def run_analysis(use_default_models: bool = False, use_cache: bool = False, recall: str = None):
+    """Run analysis for one or more ticker symbols.
+
+    Args:
+        use_default_models: If True, skip model selection and use optimized defaults
+                           (gpt-5-mini-2025-08-07 for quick thinking, gpt-5.2-2025-09-04 for deep thinking)
+        use_cache: If True, skip analysts that already have cached reports for the date
+        recall: News recall period ('3mo', '6mo', '12mo', or 'all')
+    """
     # First get all user selections
-    selections = get_user_selections()
+    selections = get_user_selections(use_default_models=use_default_models)
 
     # Create config with selected research depth
     config = DEFAULT_CONFIG.copy()
@@ -764,10 +869,32 @@ def run_analysis():
     # Normalize ticker(s) to list
     tickers = selections["ticker"] if isinstance(selections["ticker"], list) else [selections["ticker"]]
 
-    # Initialize the graph once and reuse for all symbols
-    graph = TradingAgentsGraph(
-        [analyst.value for analyst in selections["analysts"]], config=config, debug=True
-    )
+    # Get news limits from config
+    news_limits = config.get("news_limits", {
+        "default": 50,
+        "3mo": 200,
+        "6mo": 500,
+        "12mo": 1000,
+    })
+
+    # Determine recall periods to run (suffix, lookback_days, article_limit)
+    if recall is None:
+        # Default: 7-day lookback, no recall suffix in folder
+        recall_periods = [(None, 7, news_limits.get("default", 50))]
+    elif recall.lower() == "all":
+        # Run all three recall periods
+        recall_periods = [
+            ("Recall_3mo", RECALL_PERIODS["3mo"], news_limits.get("3mo", 200)),
+            ("Recall_6mo", RECALL_PERIODS["6mo"], news_limits.get("6mo", 500)),
+            ("Recall_12mo", RECALL_PERIODS["12mo"], news_limits.get("12mo", 1000)),
+        ]
+        console.print(f"[bold cyan]Running analysis with all recall periods: 3mo, 6mo, 12mo[/bold cyan]")
+    else:
+        # Run single recall period
+        recall_lower = recall.lower()
+        article_limit = news_limits.get(recall_lower, 200)
+        recall_periods = [(f"Recall_{recall_lower}", RECALL_PERIODS[recall_lower], article_limit)]
+        console.print(f"[bold cyan]Running analysis with {recall_lower} recall period ({RECALL_PERIODS[recall_lower]} days, {article_limit} articles)[/bold cyan]")
 
     for i, ticker in enumerate(tickers, 1):
         if len(tickers) > 1:
@@ -775,7 +902,23 @@ def run_analysis():
             console.print(f"[bold cyan]  Analyzing {ticker} ({i}/{len(tickers)})[/bold cyan]")
             console.print(f"[bold cyan]{'═' * 50}[/bold cyan]\n")
 
-        run_single_analysis(ticker, selections, config, graph)
+        # Create a fresh graph for each ticker to ensure complete state isolation
+        graph = TradingAgentsGraph(
+            [analyst.value for analyst in selections["analysts"]], config=config, debug=True
+        )
+
+        # Run analysis for each recall period
+        for recall_suffix, lookback_days, article_limit in recall_periods:
+            if len(recall_periods) > 1:
+                console.print(f"\n[bold magenta]  Recall period: {recall_suffix} ({lookback_days} days, {article_limit} articles)[/bold magenta]")
+
+            run_single_analysis(
+                ticker, selections, config, graph,
+                use_cache=use_cache,
+                recall_suffix=recall_suffix,
+                news_lookback_days=lookback_days,
+                news_article_limit=article_limit
+            )
 
         if i < len(tickers):
             console.print(f"\n[dim]Moving to next symbol...[/dim]\n")
@@ -784,15 +927,52 @@ def run_analysis():
         console.print(f"\n[bold green]Completed analysis for all {len(tickers)} symbols: {', '.join(tickers)}[/bold green]")
 
 
-def run_single_analysis(ticker: str, selections: dict, config: dict, graph: TradingAgentsGraph):
-    """Run analysis for a single ticker symbol."""
-    # Create result directory
-    results_dir = Path(config["results_dir"]) / ticker / selections["analysis_date"]
+def run_single_analysis(
+    ticker: str,
+    selections: dict,
+    config: dict,
+    graph: TradingAgentsGraph,
+    use_cache: bool = False,
+    recall_suffix: str = None,
+    news_lookback_days: int = 7,
+    news_article_limit: int = 50
+):
+    """Run analysis for a single ticker symbol.
+
+    Args:
+        ticker: Stock ticker symbol
+        selections: User selections dict
+        config: Configuration dict
+        graph: TradingAgentsGraph instance
+        use_cache: If True, skip analysts that already have cached reports
+        recall_suffix: Optional folder suffix for recall period (e.g., "Recall_3mo")
+        news_lookback_days: Number of days to look back for news analysis (default 7)
+        news_article_limit: Maximum number of news articles to fetch (default 50)
+    """
+    # Create result directory with optional recall suffix
+    results_dir_base = Path(config["results_dir"])
+    if recall_suffix:
+        results_dir = results_dir_base / ticker / selections["analysis_date"] / recall_suffix
+    else:
+        results_dir = results_dir_base / ticker / selections["analysis_date"]
     results_dir.mkdir(parents=True, exist_ok=True)
     report_dir = results_dir / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     log_file = results_dir / "message_tool.log"
     log_file.touch(exist_ok=True)
+
+    # Check for cached reports if cache mode is enabled
+    cached_reports = {}
+    if use_cache:
+        # For recall periods, construct the full path including recall suffix
+        if recall_suffix:
+            cache_date_path = f"{selections['analysis_date']}/{recall_suffix}"
+        else:
+            cache_date_path = selections["analysis_date"]
+        cached_reports = load_cached_reports(results_dir_base, ticker, cache_date_path)
+        if cached_reports:
+            cached_list = list(cached_reports.keys())
+            console.print(f"[yellow]Cache mode enabled. Found {len(cached_reports)} cached reports: {', '.join(cached_list)}[/yellow]")
 
     def save_message_decorator(obj, func_name):
         func = getattr(obj, func_name)
@@ -874,8 +1054,18 @@ def run_single_analysis(ticker: str, selections: dict, config: dict, graph: Trad
 
         # Initialize state and get graph args
         init_agent_state = graph.propagator.create_initial_state(
-            ticker, selections["analysis_date"]
+            ticker, selections["analysis_date"],
+            news_lookback_days=news_lookback_days,
+            news_article_limit=news_article_limit
         )
+
+        # Inject cached reports if cache mode is enabled
+        if cached_reports:
+            for report_key, content in cached_reports.items():
+                if report_key in init_agent_state and content:
+                    init_agent_state[report_key] = content
+                    message_buffer.add_message("Cache", f"Loaded {report_key} from cache ({len(content)} chars)")
+
         args = graph.propagator.get_graph_args()
 
         # Stream the analysis
@@ -1114,6 +1304,21 @@ def run_single_analysis(ticker: str, selections: dict, config: dict, graph: Trad
         final_state = trace[-1]
         decision = graph.process_signal(final_state["final_trade_decision"])
 
+        # Trigger ACE learning if enabled
+        if graph.ace_engine:
+            message_buffer.add_message("ACE", f"Learning from analysis for {ticker}...")
+            update_display(layout)
+            try:
+                graph.ace_learn_from_analysis(final_state)
+                graph.save_ace_skillbook()
+                ace_stats = graph.get_ace_stats()
+                message_buffer.add_message(
+                    "ACE", f"Skillbook updated ({ace_stats.get('skills_count', 0)} skills)"
+                )
+            except Exception as e:
+                message_buffer.add_message("ACE", f"Learning failed: {e}")
+            update_display(layout)
+
         # Update all agent statuses to completed
         for agent in message_buffer.agent_status:
             message_buffer.update_agent_status(agent, "completed")
@@ -1133,9 +1338,180 @@ def run_single_analysis(ticker: str, selections: dict, config: dict, graph: Trad
         update_display(layout)
 
 
+def update_outcomes_from_results(results_dir: str = "./results") -> int:
+    """
+    Process historical results and update the outcomes database.
+
+    Scans ./results/{TICKER}/{DATE}/ directories for analysis reports
+    and logs them to the outcome tracker for future analysis.
+    Automatically validates new outcomes against market prices.
+
+    Returns:
+        Number of outcomes processed
+    """
+    from tradingagents.backtest.outcome_tracker import validate_outcome_against_market
+
+    results_path = Path(results_dir)
+    if not results_path.exists():
+        return 0
+
+    tracker = OutcomeTracker(output_dir=str(results_path / "outcomes"))
+    processed = 0
+
+    # Look for ticker directories
+    for ticker_dir in sorted(results_path.iterdir()):
+        if not ticker_dir.is_dir():
+            continue
+
+        # Skip non-ticker directories
+        dir_name = ticker_dir.name
+        if dir_name in ["outcomes", ".DS_Store"] or dir_name.startswith("."):
+            continue
+
+        ticker = dir_name
+
+        # Look for date directories under ticker
+        for date_dir in sorted(ticker_dir.iterdir()):
+            if not date_dir.is_dir():
+                continue
+
+            date_name = date_dir.name
+            # Skip if not a date-like name (YYYY-MM-DD)
+            if not (len(date_name) >= 8 and "-" in date_name):
+                continue
+
+            # Check if already processed (look for marker or existing outcome)
+            existing_outcomes = [
+                o for o in tracker.outcomes
+                if o.ticker == ticker and o.trade_date == date_name
+            ]
+            if existing_outcomes:
+                continue
+
+            # Try to read reports from this date directory
+            reports_dir = date_dir / "reports"
+            reports_summary = {}
+
+            if reports_dir.exists():
+                for report_type in ["market", "sentiment", "news", "fundamentals"]:
+                    report_file = reports_dir / f"{report_type}_report.md"
+                    if report_file.exists():
+                        try:
+                            content = report_file.read_text()
+                            # Truncate to reasonable summary length
+                            reports_summary[report_type] = (
+                                content[:200] + "..." if len(content) > 200 else content
+                            )
+                        except Exception:
+                            pass
+
+            # Try to extract decision and confidence from final_trade_decision report
+            from tradingagents.graph.signal_processing import (
+                extract_decision_from_text,
+                extract_confidence_from_text,
+            )
+            decision = "UNKNOWN"
+            confidence = None
+            final_decision_file = reports_dir / "final_trade_decision.md"
+            if final_decision_file.exists():
+                try:
+                    content = final_decision_file.read_text()
+                    decision = extract_decision_from_text(content)
+                    confidence = extract_confidence_from_text(content)
+                except ValueError as e:
+                    print(f"  Warning: Could not extract decision from {final_decision_file.name}: {e}")
+                except Exception as e:
+                    print(f"  Warning: Error reading {final_decision_file.name}: {e}")
+
+            # Create outcome record if we have any data
+            if reports_summary or decision != "UNKNOWN":
+                outcome = TradeOutcome(
+                    ticker=ticker,
+                    trade_date=date_name,
+                    decision=decision,
+                    confidence=confidence,
+                    reports_summary=reports_summary,
+                    entry_price=0.0,
+                    exit_price=0.0,
+                    pnl=0.0,
+                    return_pct=0.0,
+                    holding_period_days=0,
+                    market_regime="unknown",
+                    strategy_name="TradingAgents",
+                )
+                # Validate against market prices immediately
+                outcome = validate_outcome_against_market(outcome)
+                tracker.outcomes.append(outcome)
+                processed += 1
+
+    # Save if we processed anything
+    if processed > 0:
+        tracker.save()
+
+    return processed
+
+
+
+
 @app.command()
-def analyze():
-    run_analysis()
+def outcomes(
+    summary: bool = typer.Option(True, "--summary", "-s", help="Show summary statistics"),
+    ticker: Optional[str] = typer.Option(None, "--ticker", "-t", help="Filter by ticker"),
+    process_historical: bool = typer.Option(
+        False, "--process-historical", "-p",
+        help="Process all historical results"
+    ),
+    validate: bool = typer.Option(
+        False, "--validate", "-v",
+        help="Validate outcomes against actual market prices"
+    ),
+):
+    """Analyze trade outcomes from historical results."""
+    from cli.analyze_outcomes import (
+        load_all_outcomes,
+        process_historical_results,
+        print_summary,
+        print_ticker_analysis,
+    )
+    from tradingagents.backtest.outcome_tracker import validate_all_outcomes
+
+    config = DEFAULT_CONFIG.copy()
+    results_dir = config.get("results_dir", "./results")
+    outcomes_dir = f"{results_dir}/outcomes"
+
+    if process_historical:
+        outcomes_list = process_historical_results(results_dir)
+        if outcomes_list:
+            tracker = OutcomeTracker(output_dir=outcomes_dir)
+            tracker.outcomes = outcomes_list
+            tracker.save()
+            console.print(f"[green]Saved {len(outcomes_list)} outcomes[/green]")
+    else:
+        outcomes_list = load_all_outcomes(outcomes_dir)
+
+    if not outcomes_list:
+        console.print("[yellow]No outcomes found. Run analyses or use --process-historical[/yellow]")
+        return
+
+    # Validate against market if requested
+    if validate:
+        console.print("[cyan]Validating outcomes against market prices...[/cyan]")
+        unvalidated = [o for o in outcomes_list if not o.validated]
+        if unvalidated:
+            outcomes_list = validate_all_outcomes(outcomes_list)
+            console.print(f"[green]Validated {len(unvalidated)} outcomes[/green]")
+
+            # Save validated outcomes
+            tracker = OutcomeTracker(output_dir=outcomes_dir)
+            tracker.outcomes = outcomes_list
+            tracker.save()
+        else:
+            console.print("[dim]All outcomes already validated[/dim]")
+
+    if ticker:
+        print_ticker_analysis(outcomes_list, ticker)
+    elif summary:
+        print_summary(outcomes_list)
 
 
 if __name__ == "__main__":

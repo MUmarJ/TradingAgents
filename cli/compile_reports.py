@@ -210,17 +210,26 @@ def extract_decision(content: str) -> str:
         if match:
             return match.group(1).upper()
 
+    # Try the canonical signal_processing extractor (same patterns used in backtest)
+    try:
+        from tradingagents.graph.signal_processing import extract_decision_from_text
+        return extract_decision_from_text(content)
+    except (ValueError, ImportError):
+        pass
+
+    # Keyword frequency fallback — only return if one keyword clearly dominates
     buy_count = len(re.findall(r"\bbuy\b", content_lower))
     sell_count = len(re.findall(r"\bsell\b", content_lower))
     hold_count = len(re.findall(r"\bhold\b", content_lower))
 
-    max_count = max(buy_count, sell_count, hold_count)
+    counts = {"BUY": buy_count, "SELL": sell_count, "HOLD": hold_count}
+    max_count = max(counts.values())
     if max_count > 0:
-        if sell_count == max_count:
-            return "SELL"
-        if buy_count == max_count:
-            return "BUY"
-        return "HOLD"
+        winners = [k for k, v in counts.items() if v == max_count]
+        if len(winners) == 1:
+            return winners[0]
+        # Tied — cannot determine decision
+        return "N/A"
 
     return "N/A"
 
@@ -239,12 +248,17 @@ def markdown_to_html(md_content: str) -> str:
     )
 
 
-def find_all_reports(results_dir: Path, date_filter: str | None = None) -> list[dict]:
+def find_all_reports(
+    results_dir: Path,
+    date_filter: str | None = None,
+    ticker_filter: str | None = None,
+) -> list[dict]:
     """Find all report directories and extract their data.
 
     Args:
         results_dir: Path to the results directory
         date_filter: Optional date string (YYYY-MM-DD) to filter reports
+        ticker_filter: Optional ticker symbol to filter reports
     """
     all_reports = []
 
@@ -257,6 +271,10 @@ def find_all_reports(results_dir: Path, date_filter: str | None = None) -> list[
 
         symbol = symbol_dir.name
         if symbol.startswith(".") or " " in symbol:
+            continue
+
+        # Skip if ticker doesn't match filter
+        if ticker_filter and symbol.upper() != ticker_filter.upper():
             continue
 
         for date_dir in sorted(symbol_dir.iterdir(), reverse=True):
@@ -299,16 +317,137 @@ def find_all_reports(results_dir: Path, date_filter: str | None = None) -> list[
     return all_reports
 
 
+def find_recall_reports(
+    results_dir: Path,
+    date_filter: str | None = None,
+    ticker_filter: str | None = None,
+    recall_filter: str | None = None,
+) -> list[dict]:
+    """Find all Recall report directories and extract their data.
+
+    Handles structure: results/{SYMBOL}/{DATE}/Recall_{period}/reports/
+
+    Args:
+        results_dir: Path to the results directory
+        date_filter: Optional date string (YYYY-MM-DD) to filter reports
+        ticker_filter: Optional ticker symbol to filter reports
+        recall_filter: Optional recall period ("3mo", "6mo", "12mo") or None for all
+    """
+    all_reports = []
+
+    if not results_dir.exists():
+        return all_reports
+
+    for symbol_dir in sorted(results_dir.iterdir()):
+        if not symbol_dir.is_dir():
+            continue
+
+        symbol = symbol_dir.name
+        if symbol.startswith(".") or " " in symbol:
+            continue
+
+        # Skip if ticker doesn't match filter
+        if ticker_filter and symbol.upper() != ticker_filter.upper():
+            continue
+
+        for date_dir in sorted(symbol_dir.iterdir(), reverse=True):
+            if not date_dir.is_dir():
+                continue
+
+            date = date_dir.name
+
+            # Skip if date doesn't match filter
+            if date_filter and date != date_filter:
+                continue
+
+            # Look for Recall_* subdirectories
+            for recall_dir in sorted(date_dir.iterdir()):
+                if not recall_dir.is_dir():
+                    continue
+
+                if not recall_dir.name.startswith("Recall_"):
+                    continue
+
+                # Extract period (e.g., "3mo" from "Recall_3mo")
+                period = recall_dir.name.replace("Recall_", "")
+
+                if recall_filter and period != recall_filter:
+                    continue
+
+                reports_dir = recall_dir / "reports"
+                if not reports_dir.exists():
+                    continue
+
+                report_files = []
+                decision = "N/A"
+
+                for filename, title in REPORT_ORDER:
+                    file_path = reports_dir / filename
+                    if file_path.exists():
+                        content = file_path.read_text(encoding="utf-8")
+                        html_content = markdown_to_html(content)
+                        report_files.append((filename, title, html_content))
+
+                        if filename == "final_trade_decision.md":
+                            decision = extract_decision(content)
+
+                if report_files:
+                    all_reports.append({
+                        "symbol": symbol,
+                        "date": date,
+                        "period": period,
+                        "decision": decision,
+                        "reports_dir": reports_dir,
+                        "reports": report_files,
+                        "is_recall": True,
+                    })
+
+    return all_reports
+
+
 def build_html_document(all_reports: list[dict]) -> str:
     """Build complete HTML document with summary table and all reports."""
 
-    # Build summary table rows
+    # Detect if we have recall reports
+    has_recall = any(r.get("is_recall", False) for r in all_reports)
+
+    # Period display mapping
+    period_display_map = {"3mo": "3 Month", "6mo": "6 Month", "12mo": "12 Month"}
+
+    # Sort reports for logical grouping (symbol, date, period)
+    sorted_reports = sorted(
+        all_reports,
+        key=lambda r: (r["symbol"], r["date"], r.get("period", "")),
+    )
+
+    # Build summary table rows with visual grouping
     summary_rows = []
-    for report_data in all_reports:
+    current_symbol = None
+
+    for report_data in sorted_reports:
         decision = report_data["decision"]
         decision_class = f"decision-{decision.lower()}" if decision in ["BUY", "SELL", "HOLD"] else ""
-        summary_rows.append(f'''<tr>
-            <td><strong>{report_data["symbol"]}</strong></td>
+
+        # Show symbol only on first row of each group
+        symbol_display = report_data["symbol"]
+        if report_data["symbol"] == current_symbol and has_recall:
+            symbol_display = ""
+        else:
+            current_symbol = report_data["symbol"]
+
+        if has_recall:
+            period = report_data.get("period", "N/A")
+            period_text = period_display_map.get(period, period)
+            summary_rows.append(f'''<tr>
+            <td><strong>{symbol_display}</strong></td>
+            <td>{report_data["date"]}</td>
+            <td>{period_text}</td>
+            <td class="{decision_class}">{decision}</td>
+            <td>{len(report_data["reports"])} reports</td>
+        </tr>''')
+        else:
+            summary_rows.append(f'''<tr>
+            <td><strong>{symbol_display}</strong></td>
             <td>{report_data["date"]}</td>
             <td class="{decision_class}">{decision}</td>
             <td>{len(report_data["reports"])} reports</td>
@@ -316,24 +455,49 @@ def build_html_document(all_reports: list[dict]) -> str:
 
     summary_table = "\n".join(summary_rows)
 
+    # Build table header based on report type
+    if has_recall:
+        table_header = """<tr>
+            <th>Symbol</th>
+            <th>Analysis Date</th>
+            <th>Period</th>
+            <th>Decision</th>
+            <th>Reports</th>
+        </tr>"""
+    else:
+        table_header = """<tr>
+            <th>Symbol</th>
+            <th>Analysis Date</th>
+            <th>Decision</th>
+            <th>Reports</th>
+        </tr>"""
+
     # Build symbol sections
     symbol_sections = []
-    for report_data in all_reports:
+    for report_data in sorted_reports:
         symbol = report_data["symbol"]
         date = report_data["date"]
         decision = report_data["decision"]
         decision_class = f"decision-{decision.lower()}" if decision in ["BUY", "SELL", "HOLD"] else ""
 
+        # Include period in title for Recall reports
+        if report_data.get("is_recall"):
+            period = report_data.get("period", "")
+            period_text = period_display_map.get(period, period)
+            title = f"{symbol} Trading Analysis Report ({period_text} Recall)"
+        else:
+            title = f"{symbol} Trading Analysis Report"
+
         # Build report content - simple flowing structure
         reports_html_parts = []
-        for _, title, html_content in report_data["reports"]:
-            reports_html_parts.append(f'''<div class="report-title">{title}</div>
+        for _, report_title, html_content in report_data["reports"]:
+            reports_html_parts.append(f'''<div class="report-title">{report_title}</div>
 {html_content}''')
 
         reports_html = "\n".join(reports_html_parts)
 
         symbol_sections.append(f'''<div class="symbol-section">
-<h1>{symbol} Trading Analysis Report</h1>
+<h1>{title}</h1>
 <p><strong>Date:</strong> {date} &nbsp;|&nbsp; <strong>Recommendation:</strong> <span class="{decision_class}">{decision}</span></p>
 <hr>
 {reports_html}
@@ -360,12 +524,7 @@ def build_html_document(all_reports: list[dict]) -> str:
 <h2>Summary of Recommendations</h2>
 <table>
     <thead>
-        <tr>
-            <th>Symbol</th>
-            <th>Analysis Date</th>
-            <th>Decision</th>
-            <th>Reports</th>
-        </tr>
+        {table_header}
     </thead>
     <tbody>
         {summary_table}
@@ -418,7 +577,9 @@ Examples:
     python cli/compile_reports.py
     python cli/compile_reports.py --output my_report.pdf
     python cli/compile_reports.py --date 2026-01-18
-    python cli/compile_reports.py --date 2026-01-18 --output custom.pdf
+    python cli/compile_reports.py --ticker RAPT
+    python cli/compile_reports.py --ticker RAPT --recall all
+    python cli/compile_reports.py --ticker RAPT --recall 6mo --date 2026-01-20
         """,
     )
     parser.add_argument(
@@ -434,6 +595,15 @@ Examples:
     parser.add_argument(
         "--date", "-d",
         help="Filter reports to a specific date (format: YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--ticker", "-t",
+        help="Filter reports to a specific ticker symbol (e.g., RAPT)",
+    )
+    parser.add_argument(
+        "--recall", "-R",
+        choices=["3mo", "6mo", "12mo", "all"],
+        help="Filter to Recall period reports. Use 'all' to include all periods.",
     )
 
     args = parser.parse_args()
@@ -452,21 +622,54 @@ Examples:
         print(f"Error: Results directory not found: {results_dir}")
         sys.exit(1)
 
+    # Build scan message
+    scan_filters = []
+    if args.ticker:
+        scan_filters.append(f"ticker {args.ticker}")
     if args.date:
-        print(f"Scanning {results_dir} for reports on {args.date}...")
+        scan_filters.append(f"date {args.date}")
+    if args.recall:
+        scan_filters.append(f"Recall period {args.recall}")
+
+    if scan_filters:
+        print(f"Scanning {results_dir} for reports ({', '.join(scan_filters)})...")
     else:
         print(f"Scanning {results_dir} for reports...")
 
-    all_reports = find_all_reports(results_dir, date_filter=args.date)
+    # Choose which scanner to use based on --recall flag
+    if args.recall:
+        recall_filter = None if args.recall == "all" else args.recall
+        all_reports = find_recall_reports(
+            results_dir,
+            date_filter=args.date,
+            ticker_filter=args.ticker,
+            recall_filter=recall_filter,
+        )
+    else:
+        all_reports = find_all_reports(
+            results_dir,
+            date_filter=args.date,
+            ticker_filter=args.ticker,
+        )
 
     if not all_reports:
+        filter_desc = []
+        if args.ticker:
+            filter_desc.append(f"ticker {args.ticker}")
         if args.date:
-            print(f"No reports found for date {args.date}")
+            filter_desc.append(f"date {args.date}")
+        if args.recall:
+            filter_desc.append(f"Recall_{args.recall}")
+        if filter_desc:
+            print(f"No reports found for {', '.join(filter_desc)}")
         else:
             print("No reports found")
         sys.exit(1)
 
-    print(f"Found {len(all_reports)} symbol analysis report(s):\n")
+    print(f"Found {len(all_reports)} report(s):\n")
+
+    # Period display mapping for console output
+    period_display_map = {"3mo": "3mo", "6mo": "6mo", "12mo": "12mo"}
 
     for report_data in all_reports:
         decision_indicator = {
@@ -475,14 +678,29 @@ Examples:
             "HOLD": "[HOLD]",
         }.get(report_data["decision"], "[N/A]")
 
-        print(f"  {report_data['symbol']:6} | {report_data['date']} | {decision_indicator:6} | {len(report_data['reports'])} reports")
+        if report_data.get("is_recall"):
+            period = report_data.get("period", "")
+            period_str = period_display_map.get(period, period)
+            print(f"  {report_data['symbol']:6} | {report_data['date']} | {period_str:4} | {decision_indicator:6} | {len(report_data['reports'])} reports")
+        else:
+            print(f"  {report_data['symbol']:6} | {report_data['date']} | {decision_indicator:6} | {len(report_data['reports'])} reports")
 
     # Determine output path
-    if args.date and args.output == default_output:
-        # Generate dynamic filename from date + symbols (up to 5)
-        symbols = [r["symbol"] for r in all_reports[:5]]
+    if args.output == default_output:
+        # Generate dynamic filename
+        symbols = sorted(set(r["symbol"] for r in all_reports))[:5]
         symbols_str = "_".join(symbols)
-        output_path = Path(f"./results/trading_report_{args.date}_{symbols_str}.pdf")
+
+        if args.date and args.recall:
+            recall_suffix = f"Recall_{args.recall}"
+            output_path = Path(f"./results/trading_report_{args.date}_{symbols_str}_{recall_suffix}.pdf")
+        elif args.date:
+            output_path = Path(f"./results/trading_report_{args.date}_{symbols_str}.pdf")
+        elif args.recall:
+            recall_suffix = f"Recall_{args.recall}"
+            output_path = Path(f"./results/trading_report_{symbols_str}_{recall_suffix}.pdf")
+        else:
+            output_path = Path(default_output)
     else:
         output_path = Path(args.output)
 
