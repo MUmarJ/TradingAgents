@@ -8,9 +8,11 @@ the Responses API.
 """
 
 import json
+import logging
 import os
+import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -25,6 +27,8 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from openai import OpenAI
 from pydantic import Field
+
+logger = logging.getLogger(__name__)
 
 
 class ChatOpenAIResponses(BaseChatModel):
@@ -45,6 +49,12 @@ class ChatOpenAIResponses(BaseChatModel):
     temperature: float = Field(default=1.0)
     max_output_tokens: int = Field(default=4096)
     top_p: float = Field(default=1.0)
+
+    # Retry settings for rate limit handling
+    max_retries: int = Field(default=5)
+    initial_retry_delay: float = Field(default=1.0)
+    max_retry_delay: float = Field(default=60.0)
+    retry_multiplier: float = Field(default=2.0)
 
     # Internal state for tool binding
     _bound_tools: List[Dict[str, Any]] = []
@@ -93,6 +103,10 @@ class ChatOpenAIResponses(BaseChatModel):
             temperature=self.temperature,
             max_output_tokens=self.max_output_tokens,
             top_p=self.top_p,
+            max_retries=self.max_retries,
+            initial_retry_delay=self.initial_retry_delay,
+            max_retry_delay=self.max_retry_delay,
+            retry_multiplier=self.retry_multiplier,
         )
         new_instance._bound_tools = self._convert_tools(tools)
         return new_instance
@@ -262,6 +276,8 @@ class ChatOpenAIResponses(BaseChatModel):
     ) -> ChatResult:
         """Generate a response using the OpenAI Responses API.
 
+        Includes exponential backoff retry logic for rate limit errors (429).
+
         Args:
             messages: List of LangChain messages to send.
             stop: Optional stop sequences (not used by Responses API).
@@ -282,12 +298,15 @@ class ChatOpenAIResponses(BaseChatModel):
             "top_p": self.top_p,
         }
 
+        # Debug: log which model is being called
+        logger.info(f"ChatOpenAIResponses: Calling model '{self.model}' with {len(converted_messages)} messages")
+
         # Add tools if bound
         if self._bound_tools:
             request_params["tools"] = self._bound_tools
 
-        # Make the API call
-        response = self.client.responses.create(**request_params)
+        # Make the API call with exponential backoff retry
+        response = self._call_with_retry(request_params)
 
         # Parse the response
         ai_message = self._parse_response(response)
@@ -295,6 +314,71 @@ class ChatOpenAIResponses(BaseChatModel):
         return ChatResult(
             generations=[ChatGeneration(message=ai_message)],
         )
+
+    def _call_with_retry(self, request_params: Dict[str, Any]) -> Any:
+        """Make API call with exponential backoff retry for rate limits.
+
+        Args:
+            request_params: Parameters for the API call.
+
+        Returns:
+            API response object.
+
+        Raises:
+            Exception: If all retries are exhausted or non-retryable error occurs.
+        """
+        last_exception = None
+        delay = self.initial_retry_delay
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self.client.responses.create(**request_params)
+            except Exception as e:
+                error_str = str(e)
+                last_exception = e
+
+                # Check if this is a rate limit error (429)
+                is_rate_limit = (
+                    "429" in error_str
+                    or "rate_limit" in error_str.lower()
+                    or "rate limit" in error_str.lower()
+                )
+
+                if not is_rate_limit:
+                    # Non-retryable error, raise immediately
+                    raise
+
+                if attempt == self.max_retries:
+                    # Exhausted all retries
+                    logger.error(
+                        f"Rate limit: exhausted {self.max_retries} retries for {self.model}"
+                    )
+                    raise
+
+                # Extract suggested wait time from error if available
+                wait_time = delay
+                if "Please try again in" in error_str:
+                    try:
+                        # Parse "Please try again in 6.045s"
+                        import re
+                        match = re.search(r"try again in ([\d.]+)s", error_str)
+                        if match:
+                            wait_time = max(float(match.group(1)), delay)
+                    except (ValueError, AttributeError):
+                        pass
+
+                logger.warning(
+                    f"Rate limit hit for {self.model}, attempt {attempt + 1}/{self.max_retries + 1}. "
+                    f"Waiting {wait_time:.1f}s before retry..."
+                )
+
+                time.sleep(wait_time)
+
+                # Exponential backoff for next attempt
+                delay = min(delay * self.retry_multiplier, self.max_retry_delay)
+
+        # Should not reach here, but just in case
+        raise last_exception
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
@@ -304,4 +388,5 @@ class ChatOpenAIResponses(BaseChatModel):
             "base_url": self.base_url,
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
+            "max_retries": self.max_retries,
         }
