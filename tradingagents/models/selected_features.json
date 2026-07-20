@@ -1,0 +1,630 @@
+{
+  "version": 1,
+  "generated_at": "2026-02-18T19:41:56.316935",
+  "method": "shap_treexplainer",
+  "n_samples": 28,
+  "n_original_features": 149,
+  "top_n": 20,
+  "feature_to_sample_ratio": 0.71,
+  "cv_accuracy": 0.4286,
+  "features": [
+    "spy_gap",
+    "vs_spy_excess_5d",
+    "av_topic_mergers_and_acquisitions_avg",
+    "av_topic_retail_wholesale_avg",
+    "sector_gap",
+    "spy_return_5d",
+    "spy_ind_atr_delta5",
+    "sent_neg_pct",
+    "gap",
+    "av_topic_real_estate_avg",
+    "sector_range_5d",
+    "global_topic_real_estate_avg",
+    "ind_close_50_sma_delta5",
+    "sent_neutral_pct",
+    "global_topic_retail_wholesale_avg",
+    "spy_ind_rsi",
+    "av_n_tech_articles",
+    "av_topic_ipo_avg",
+    "spy_ind_close_50_sma_delta5",
+    "global_topic_energy_transportation_avg"
+  ],
+  "ranking": [
+    {
+      "feature": "spy_gap",
+      "mean_abs_shap": 0.423383
+    },
+    {
+      "feature": "vs_spy_excess_5d",
+      "mean_abs_shap": 0.281231
+    },
+    {
+      "feature": "av_topic_mergers_and_acquisitions_avg",
+      "mean_abs_shap": 0.279369
+    },
+    {
+      "feature": "av_topic_retail_wholesale_avg",
+      "mean_abs_shap": 0.214732
+    },
+    {
+      "feature": "sector_gap",
+      "mean_abs_shap": 0.203225
+    },
+    {
+      "feature": "spy_return_5d",
+      "mean_abs_shap": 0.150425
+    },
+    {
+      "feature": "spy_ind_atr_delta5",
+      "mean_abs_shap": 0.148578
+    },
+    {
+      "feature": "sent_neg_pct",
+      "mean_abs_shap": 0.133914
+    },
+    {
+      "feature": "gap",
+      "mean_abs_shap": 0.123388
+    },
+    {
+      "feature": "av_topic_real_estate_avg",
+      "mean_abs_shap": 0.105366
+    },
+    {
+      "feature": "sector_range_5d",
+      "mean_abs_shap": 0.105308
+    },
+    {
+      "feature": "global_topic_real_estate_avg",
+      "mean_abs_shap": 0.098
+    },
+    {
+      "feature": "ind_close_50_sma_delta5",
+      "mean_abs_shap": 0.093269
+    },
+    {
+      "feature": "sent_neutral_pct",
+      "mean_abs_shap": 0.09222
+    },
+    {
+      "feature": "global_topic_retail_wholesale_avg",
+      "mean_abs_shap": 0.091067
+    },
+    {
+      "feature": "spy_ind_rsi",
+      "mean_abs_shap": 0.082973
+    },
+    {
+      "feature": "av_n_tech_articles",
+      "mean_abs_shap": 0.074452
+    },
+    {
+      "feature": "av_topic_ipo_avg",
+      "mean_abs_shap": 0.073662
+    },
+    {
+      "feature": "spy_ind_close_50_sma_delta5",
+      "mean_abs_shap": 0.068992
+    },
+    {
+      "feature": "global_topic_energy_transportation_avg",
+      "mean_abs_shap": 0.066525
+    },
+    {
+      "feature": "spy_return_3d",
+      "mean_abs_shap": 0.06626
+    },
+    {
+      "feature": "av_topic_economy_macro_avg",
+      "mean_abs_shap": 0.065409
+    },
+    {
+      "feature": "av_topic_financial_markets_n",
+      "mean_abs_shap": 0.06246
+    },
+    {
+      "feature": "global_topic_mergers_and_acquisitions_avg",
+      "mean_abs_shap": 0.060888
+    },
+    {
+      "feature": "sector_vol_5d",
+      "mean_abs_shap": 0.056306
+    },
+    {
+      "feature": "spy_ind_macd_delta5",
+      "mean_abs_shap": 0.056041
+    },
+    {
+      "feature": "av_topic_technology_n",
+      "mean_abs_shap": 0.055911
+    },
+    {
+      "feature": "vol_ratio_5d",
+      "mean_abs_shap": 0.049864
+    },
+    {
+      "feature": "vs_sector_corr_20d",
+      "mean_abs_shap": 0.046448
+    },
+    {
+      "feature": "av_topic_technology_avg",
+      "mean_abs_shap": 0.045906
+    },
+    {
+      "feature": "sector_return_3d",
+      "mean_abs_shap": 0.042863
+    },
+    {
+      "feature": "vs_sector_excess_10d",
+      "mean_abs_shap": 0.039162
+    },
+    {
+      "feature": "av_topic_manufacturing_avg",
+      "mean_abs_shap": 0.036146
+    },
+    {
+      "feature": "av_topic_energy_transportation_n",
+      "mean_abs_shap": 0.03612
+    },
+    {
+      "feature": "ind_close_50_sma",
+      "mean_abs_shap": 0.035773
+    },
+    {
+      "feature": "global_topic_economy_macro_avg",
+      "mean_abs_shap": 0.031929
+    },
+    {
+      "feature": "return_5d",
+      "mean_abs_shap": 0.030803
+    },
+    {
+      "feature": "sector_vol_20d",
+      "mean_abs_shap": 0.028593
+    },
+    {
+      "feature": "return_3d",
+      "mean_abs_shap": 0.027344
+    },
+    {
+      "feature": "av_topic_financial_markets_avg",
+      "mean_abs_shap": 0.027139
+    },
+    {
+      "feature": "av_topic_economy_macro_n",
+      "mean_abs_shap": 0.025828
+    },
+    {
+      "feature": "sent_pos_pct",
+      "mean_abs_shap": 0.025008
+    },
+    {
+      "feature": "sector_return_10d",
+      "mean_abs_shap": 0.024509
+    },
+    {
+      "feature": "global_topic_blockchain_avg",
+      "mean_abs_shap": 0.024356
+    },
+    {
+      "feature": "av_topic_retail_wholesale_n",
+      "mean_abs_shap": 0.022478
+    },
+    {
+      "feature": "av_topic_mergers_and_acquisitions_n",
+      "mean_abs_shap": 0.022256
+    },
+    {
+      "feature": "av_topic_finance_avg",
+      "mean_abs_shap": 0.022195
+    },
+    {
+      "feature": "ind_macd_delta5",
+      "mean_abs_shap": 0.020699
+    },
+    {
+      "feature": "spy_vol_ratio_5d",
+      "mean_abs_shap": 0.019394
+    },
+    {
+      "feature": "global_topic_technology_n",
+      "mean_abs_shap": 0.018711
+    },
+    {
+      "feature": "av_topic_energy_transportation_avg",
+      "mean_abs_shap": 0.01815
+    },
+    {
+      "feature": "spy_ind_rsi_delta5",
+      "mean_abs_shap": 0.017901
+    },
+    {
+      "feature": "spy_return_20d",
+      "mean_abs_shap": 0.017728
+    },
+    {
+      "feature": "global_topic_technology_avg",
+      "mean_abs_shap": 0.016957
+    },
+    {
+      "feature": "vs_spy_corr_20d",
+      "mean_abs_shap": 0.016877
+    },
+    {
+      "feature": "sent_avg",
+      "mean_abs_shap": 0.015781
+    },
+    {
+      "feature": "sector_return_5d",
+      "mean_abs_shap": 0.015612
+    },
+    {
+      "feature": "av_topic_blockchain_avg",
+      "mean_abs_shap": 0.015537
+    },
+    {
+      "feature": "spy_vol_5d",
+      "mean_abs_shap": 0.014115
+    },
+    {
+      "feature": "return_20d",
+      "mean_abs_shap": 0.013809
+    },
+    {
+      "feature": "av_topic_manufacturing_n",
+      "mean_abs_shap": 0.01309
+    },
+    {
+      "feature": "sector_vol_ratio_5d",
+      "mean_abs_shap": 0.012212
+    },
+    {
+      "feature": "global_topic_energy_transportation_n",
+      "mean_abs_shap": 0.011822
+    },
+    {
+      "feature": "global_topic_ipo_avg",
+      "mean_abs_shap": 0.011721
+    },
+    {
+      "feature": "av_topic_earnings_n",
+      "mean_abs_shap": 0.010612
+    },
+    {
+      "feature": "vs_sector_excess_5d",
+      "mean_abs_shap": 0.010135
+    },
+    {
+      "feature": "range_5d",
+      "mean_abs_shap": 0.010034
+    },
+    {
+      "feature": "ind_atr_delta5",
+      "mean_abs_shap": 0.009976
+    },
+    {
+      "feature": "spy_ind_atr",
+      "mean_abs_shap": 0.009239
+    },
+    {
+      "feature": "sent_weighted",
+      "mean_abs_shap": 0.009146
+    },
+    {
+      "feature": "spy_ind_boll",
+      "mean_abs_shap": 0.008938
+    },
+    {
+      "feature": "vs_sector_excess_20d",
+      "mean_abs_shap": 0.005975
+    },
+    {
+      "feature": "av_avg_relevance",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_avg_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_max_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_min_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_n_bearish",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_n_bullish",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_n_neutral",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_n_ticker_articles",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_blockchain_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_earnings_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_economy_fiscal_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_economy_fiscal_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_economy_monetary_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_economy_monetary_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_finance_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_ipo_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_life_sciences_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_life_sciences_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "av_topic_real_estate_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_avg_relevance",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_avg_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_max_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_min_ticker_sentiment",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_n_bearish",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_n_bullish",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_n_neutral",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_n_tech_articles",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_n_ticker_articles",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_blockchain_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_earnings_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_earnings_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_economy_fiscal_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_economy_fiscal_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_economy_macro_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_economy_monetary_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_economy_monetary_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_finance_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_finance_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_financial_markets_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_financial_markets_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_ipo_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_life_sciences_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_life_sciences_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_manufacturing_avg",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_manufacturing_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_mergers_and_acquisitions_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_real_estate_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "global_topic_retail_wholesale_n",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_atr",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_boll",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_boll_delta5",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_close_200_sma",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_close_200_sma_delta5",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_macd",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_rsi",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "ind_rsi_delta5",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "pct_range_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "return_10d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "return_1d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "sector_pct_range_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "sector_return_1d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "sector_return_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "sent_n_articles",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_ind_boll_delta5",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_ind_close_200_sma",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_ind_close_200_sma_delta5",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_ind_close_50_sma",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_ind_macd",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_pct_range_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_range_5d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_return_10d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_return_1d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "spy_vol_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "vol_20d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "vol_5d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "vs_spy_excess_10d",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "vs_spy_excess_20d",
+      "mean_abs_shap": 0.0
+    }
+  ]
+}
