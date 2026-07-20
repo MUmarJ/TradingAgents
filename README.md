@@ -13,19 +13,19 @@
 
 <div align="center">
   <!-- Keep these links. Translations will automatically update with the README. -->
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=de">Deutsch</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=es">Español</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=fr">français</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ja">日本語</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ko">한국어</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=pt">Português</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ru">Русский</a> | 
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=de">Deutsch</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=es">Español</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=fr">français</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ja">日本語</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ko">한국어</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=pt">Português</a> |
+  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ru">Русский</a> |
   <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=zh">中文</a>
 </div>
 
 ---
 
-# TradingAgents: Multi-Agents LLM Financial Trading Framework 
+# TradingAgents: Multi-Agents LLM Financial Trading Framework
 
 > 🎉 **TradingAgents** officially released! We have received numerous inquiries about the work, and we would like to express our thanks for the enthusiasm in our community.
 >
@@ -137,6 +137,83 @@ python -m cli.main
 ```
 You will see a screen where you can select your desired tickers, date, LLMs, research depth, etc.
 
+#### CLI Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--default-models` | `-d` | Skip model selection and use optimized defaults (gpt-5-mini for quick, gpt-5.2 for deep) |
+| `--cache` | `-c` | Resume analysis using cached reports - skips analysts that already have reports for the date |
+| `--recall` | `-r` | News recall period: `3mo`, `6mo`, `12mo`, or `all` for all periods |
+
+#### Examples
+
+```bash
+# Basic analysis with interactive prompts
+python -m cli.main
+
+# Quick start with default models (skip model selection)
+python -m cli.main -d
+
+# Resume analysis using cached reports
+python -m cli.main -c
+
+# Run with 6-month news recall period
+python -m cli.main --recall 6mo
+
+# Run all recall periods (3mo, 6mo, 12mo) with default models
+python -m cli.main -d --recall all
+
+# Combine flags: default models + cache + 3-month recall
+python -m cli.main -d -c -r 3mo
+```
+
+#### Recall Periods
+
+The `--recall` option extends the news analysis lookback period beyond the default 7 days:
+
+| Period | Lookback Days | Article Limit | Use Case |
+|--------|---------------|---------------|----------|
+| Default | 7 days | 50 | Recent market analysis |
+| `3mo` | 90 days | 200 | Quarterly trend analysis |
+| `6mo` | 180 days | 500 | Semi-annual patterns |
+| `12mo` | 365 days | 500 | Full year context |
+
+Article limits can be customized via environment variables (see `.env.example`).
+
+#### Compile Reports
+
+After running analysis, you can compile the generated reports into a consolidated PDF:
+
+```bash
+# Compile all reports
+python cli/compile_reports.py
+
+# Compile for a specific date
+python cli/compile_reports.py --date 2026-01-20
+
+# Filter by ticker symbol
+python cli/compile_reports.py --ticker RAPT
+
+# Compile Recall period reports (all periods)
+python cli/compile_reports.py --ticker RAPT --recall all
+
+# Compile specific Recall period
+python cli/compile_reports.py --ticker RAPT --recall 6mo
+
+# Combine filters: ticker + date + recall period
+python cli/compile_reports.py --ticker RAPT --date 2026-01-20 --recall all
+
+# Custom output filename
+python cli/compile_reports.py --output my_report.pdf
+```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--ticker` | `-t` | Filter to specific ticker symbol (e.g., RAPT) |
+| `--date` | `-d` | Filter to specific date (YYYY-MM-DD) |
+| `--recall` | `-R` | Filter to Recall reports: `3mo`, `6mo`, `12mo`, or `all` |
+| `--output` | `-o` | Custom output PDF filename |
+
 <p align="center">
   <img src="assets/cli/cli_init.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
@@ -214,12 +291,12 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ```
 @misc{xiao2025tradingagentsmultiagentsllmfinancial,
-      title={TradingAgents: Multi-Agents LLM Financial Trading Framework}, 
+      title={TradingAgents: Multi-Agents LLM Financial Trading Framework},
       author={Yijia Xiao and Edward Sun and Di Luo and Wei Wang},
       year={2025},
       eprint={2412.20138},
       archivePrefix={arXiv},
       primaryClass={q-fin.TR},
-      url={https://arxiv.org/abs/2412.20138}, 
+      url={https://arxiv.org/abs/2412.20138},
 }
 ```
