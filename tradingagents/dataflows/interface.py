@@ -1,4 +1,5 @@
 from typing import Annotated
+import json
 import time
 
 # Import from vendor-specific modules
@@ -14,9 +15,24 @@ from .alpha_vantage import (
     get_cashflow as get_alpha_vantage_cashflow,
     get_income_statement as get_alpha_vantage_income_statement,
     get_insider_transactions as get_alpha_vantage_insider_transactions,
-    get_news as get_alpha_vantage_news
+    get_news as get_alpha_vantage_news,
+    get_global_news as get_alpha_vantage_global_news
 )
+from .social_sentiment import (
+    get_social_sentiment as get_social_sentiment_aggregated,
+    get_social_sentiment_stocktwits,
+    get_social_sentiment_finnhub,
+    get_social_sentiment_reddit,
+)
+from .stockgeist_sentiment import get_social_sentiment_stockgeist
 from .alpha_vantage_common import AlphaVantageRateLimitError
+from .polygon_common import PolygonRateLimitError
+from .polygon import (
+    get_stock as get_polygon_stock,
+    get_indicator as get_polygon_indicator,
+    get_news as get_polygon_news,
+    get_global_news as get_polygon_global_news,
+)
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 
 # Configuration and routing logic
@@ -53,29 +69,41 @@ TOOLS_CATEGORIES = {
             "get_insider_sentiment",
             "get_insider_transactions",
         ]
+    },
+    "social_sentiment": {
+        "description": "Social media sentiment (Reddit, Stocktwits, Twitter)",
+        "tools": [
+            "get_social_sentiment"
+        ]
     }
 }
 
 VENDOR_LIST = [
+    "polygon",
+    "alpha_vantage",
     "local",
     "yfinance",
     "openai",
-    "google"
+    "google",
+    "stockgeist",   # StockGeist NLP sentiment (free tier: 10k credits/mo)
+    "aggregated",   # For social sentiment (combines multiple sources)
 ]
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "polygon": get_polygon_stock,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
         "local": get_YFin_data,
     },
     # technical_indicators
     "get_indicators": {
+        "polygon": get_polygon_indicator,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
-        "local": get_stock_stats_indicators_window
+        "local": get_stock_stats_indicators_window,
     },
     # fundamental_data
     "get_fundamentals": {
@@ -99,14 +127,17 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
+        "polygon": get_polygon_news,
         "alpha_vantage": get_alpha_vantage_news,
         "openai": get_stock_news_openai,
         "google": get_google_news,
         "local": [get_finnhub_news, get_reddit_company_news, get_google_news],
     },
     "get_global_news": {
+        "polygon": get_polygon_global_news,
+        "alpha_vantage": get_alpha_vantage_global_news,
         "openai": get_global_news_openai,
-        "local": get_reddit_global_news
+        "local": get_reddit_global_news,
     },
     "get_insider_sentiment": {
         "local": get_finnhub_company_insider_sentiment
@@ -116,7 +147,99 @@ VENDOR_METHODS = {
         "yfinance": get_yfinance_insider_transactions,
         "local": get_finnhub_company_insider_transactions,
     },
+    # social_sentiment
+    "get_social_sentiment": {
+        "stocktwits": get_social_sentiment_stocktwits,      # Free, no API key needed
+        "stockgeist": get_social_sentiment_stockgeist,      # Free tier (10k credits/mo), requires STOCKGEIST_API_KEY
+        # "apewisdom" disabled — unreliable data source, not used in backtests
+        "finnhub": get_social_sentiment_finnhub,            # Requires FINNHUB_API_KEY (premium)
+        "reddit": get_social_sentiment_reddit,              # Requires REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET
+        "aggregated": get_social_sentiment_aggregated,      # Combines all sources (excluding ApeWisdom)
+    },
 }
+
+def _deduplicate_articles(articles: list, threshold: float = 0.7) -> list:
+    """Remove near-duplicate news articles using title similarity.
+
+    Uses Jaccard similarity on title words to detect duplicates.
+    When duplicates are found, keeps the article with the longest summary.
+
+    Args:
+        articles: List of article dicts (must have 'title' key).
+        threshold: Jaccard similarity threshold (0-1). Articles above
+                   this are considered duplicates. Default 0.7.
+
+    Returns:
+        Deduplicated list of articles.
+    """
+    if not articles or len(articles) <= 1:
+        return articles
+
+    def _title_words(title: str) -> set:
+        """Extract lowercase word set from title, ignoring short words."""
+        return {w.lower().strip(".,!?;:'\"()[]") for w in title.split() if len(w) > 2}
+
+    def _jaccard(set_a: set, set_b: set) -> float:
+        if not set_a or not set_b:
+            return 0.0
+        intersection = len(set_a & set_b)
+        union = len(set_a | set_b)
+        return intersection / union if union > 0 else 0.0
+
+    # Build word sets for all titles
+    title_sets = []
+    for article in articles:
+        title = article.get("title", "")
+        title_sets.append(_title_words(title))
+
+    # Track which articles are kept (not marked as duplicates)
+    kept = [True] * len(articles)
+
+    for i in range(len(articles)):
+        if not kept[i]:
+            continue
+        for j in range(i + 1, len(articles)):
+            if not kept[j]:
+                continue
+            sim = _jaccard(title_sets[i], title_sets[j])
+            if sim >= threshold:
+                # Keep the article with the longer summary
+                summary_i = len(article.get("summary", "") if (article := articles[i]) else "")
+                summary_j = len(article.get("summary", "") if (article := articles[j]) else "")
+                if summary_j > summary_i:
+                    kept[i] = False
+                    break  # i is removed, no need to compare further
+                else:
+                    kept[j] = False
+
+    result = [a for a, k in zip(articles, kept) if k]
+    removed = len(articles) - len(result)
+    if removed > 0:
+        print(f"DEDUP: Removed {removed} duplicate article(s) ({len(articles)} -> {len(result)})")
+    return result
+
+
+def _deduplicate_news_result(result):
+    """Apply deduplication to a news result (dict with 'feed' key or string).
+
+    Handles both single-vendor results (dict) and multi-vendor concatenated results (string).
+    """
+    if isinstance(result, dict) and "feed" in result:
+        result["feed"] = _deduplicate_articles(result["feed"])
+        result["items"] = str(len(result["feed"]))
+        return result
+    elif isinstance(result, str):
+        # Try to parse as JSON (multi-vendor results may be JSON strings)
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "feed" in parsed:
+                parsed["feed"] = _deduplicate_articles(parsed["feed"])
+                parsed["items"] = str(len(parsed["feed"]))
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return result
+
 
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
@@ -185,6 +308,12 @@ def route_to_vendor(method: str, *args, **kwargs):
         if is_primary_vendor:
             any_primary_vendor_attempted = True
 
+        # Multi-vendor: skip fallback vendors if primaries already produced results
+        if not is_primary_vendor and results and len(primary_vendors) > 1:
+            print(f"DEBUG: Skipping fallback vendor '{vendor}' - already have {len(results)} result(s) from primaries")
+            vendor_attempt_count -= 1
+            break
+
         # Debug: Print current attempt
         vendor_type = "PRIMARY" if is_primary_vendor else "FALLBACK"
         print(f"DEBUG: Attempting {vendor_type} vendor '{vendor}' for {method} (attempt #{vendor_attempt_count})")
@@ -219,7 +348,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                     last_error = None
                     break  # Success, exit retry loop
 
-                except (AlphaVantageRateLimitError, RateLimitError) as e:
+                except (AlphaVantageRateLimitError, RateLimitError, PolygonRateLimitError) as e:
                     print(f"RATE_LIMIT: {type(e).__name__} exceeded, falling back to next vendor.")
                     print(f"DEBUG: Rate limit details: {e}")
                     last_error = e
@@ -255,11 +384,15 @@ def route_to_vendor(method: str, *args, **kwargs):
             successful_vendor = vendor
             result_summary = f"Got {len(vendor_results)} result(s)"
             print(f"SUCCESS: Vendor '{vendor}' succeeded - {result_summary}")
-            
-            # Stopping logic: Stop after first successful vendor for single-vendor configs
-            # Multiple vendor configs (comma-separated) may want to collect from multiple sources
+
+            # Stopping logic:
+            # - Single-vendor config: stop after first success
+            # - Multi-vendor config: stop once a fallback (non-primary) vendor succeeds
             if len(primary_vendors) == 1:
                 print(f"DEBUG: Stopping after successful vendor '{vendor}' (single-vendor config)")
+                break
+            elif not is_primary_vendor:
+                print(f"DEBUG: Stopping after fallback vendor '{vendor}' succeeded")
                 break
         else:
             print(f"FAILED: Vendor '{vendor}' produced no results")
@@ -270,6 +403,10 @@ def route_to_vendor(method: str, *args, **kwargs):
         raise RuntimeError(f"All vendor implementations failed for method '{method}'")
     else:
         print(f"FINAL: Method '{method}' completed with {len(results)} result(s) from {vendor_attempt_count} vendor attempt(s)")
+
+    # Apply deduplication for news methods
+    if method in ("get_news", "get_global_news"):
+        results = [_deduplicate_news_result(r) for r in results]
 
     # Return single result if only one, otherwise concatenate as string
     if len(results) == 1:
